@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escala da Mídia - PDF Grande</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 10px; }
+        .container { width: 100%; max-width: 500px; background: white; padding: 20px; border-radius: 15px; margin: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h2 { color: #1a73e8; text-align: center; margin-top: 0; }
+        
+        .section { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #e8eaed; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; color: #3c4043; }
+        
+        .input-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        input[type="text"], input[type="date"] { flex: 1; padding: 12px; border: 1px solid #dadce0; border-radius: 8px; font-size: 16px; }
+        
+        .member-list { max-height: 120px; overflow-y: auto; background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 5px; margin-bottom: 10px; }
+        .member-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 15px; }
+        .btn-del { color: #ea4335; cursor: pointer; border: none; background: none; font-weight: bold; font-size: 18px; }
+
+        .days-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
+        .day-option { background: #fff; border: 1px solid #dadce0; padding: 8px; border-radius: 8px; text-align: center; font-size: 12px; }
+        
+        button { padding: 14px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 15px; }
+        .btn-add { background: #1a73e8; color: white; }
+        .btn-pdf { background: #34a853; color: white; width: 100%; margin-top: 15px; font-size: 18px; }
+
+        .name-select { width: 100%; border: 1px solid #1a73e8; border-radius: 6px; padding: 8px; background-color: #e8f0fe; font-size: 16px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #1a73e8; color: white; font-size: 16px; }
+        td { font-size: 16px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Escala da Mídia</h2>
+
+    <div class="section">
+        <label>1. Membros:</label>
+        <div class="input-group">
+            <input type="text" id="newMemberName" placeholder="Nome...">
+            <button class="btn-add" onclick="addMember()">Add</button>
+        </div>
+        <div class="member-list" id="memberList"></div>
+    </div>
+    
+    <div class="section">
+        <label>2. Configuração:</label>
+        <div class="days-selector">
+            <label class="day-option"><input type="checkbox" value="0" class="day-check" onchange="gerarEscala()"> Dom</label>
+            <label class="day-option"><input type="checkbox" value="1" class="day-check" onchange="gerarEscala()"> Seg</label>
+            <label class="day-option"><input type="checkbox" value="2" class="day-check" onchange="gerarEscala()"> Ter</label>
+            <label class="day-option"><input type="checkbox" value="3" class="day-check" onchange="gerarEscala()"> Qua</label>
+            <label class="day-option"><input type="checkbox" value="4" class="day-check" onchange="gerarEscala()"> Qui</label>
+            <label class="day-option"><input type="checkbox" value="5" class="day-check" onchange="gerarEscala()"> Sex</label>
+            <label class="day-option"><input type="checkbox" value="6" class="day-check" onchange="gerarEscala()"> Sáb</label>
+        </div>
+        <div style="display: flex; gap: 5px;">
+            <input type="date" id="startDate" onchange="gerarEscala()">
+            <input type="date" id="endDate" onchange="gerarEscala()">
+        </div>
+    </div>
+
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th>Data/Dia</th>
+                <th>Responsável</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <button class="btn-pdf" onclick="exportarPDF()">BAIXAR PDF GRANDE</button>
+</div>
+
+<script>
+    let membros = JSON.parse(localStorage.getItem('membrosMidia') || '[]');
+
+    window.onload = function() {
+        renderMembers();
+        document.getElementById('startDate').value = localStorage.getItem('escala_start') || "";
+        document.getElementById('endDate').value = localStorage.getItem('escala_end') || "";
+        const savedDays = JSON.parse(localStorage.getItem('escala_days') || '[]');
+        document.querySelectorAll('.day-check').forEach(cb => { if(savedDays.includes(cb.value)) cb.checked = true; });
+        gerarEscala();
+    };
+
+    function addMember() {
+        const input = document.getElementById('newMemberName');
+        if (input.value.trim()) {
+            membros.push(input.value.trim());
+            input.value = "";
+            saveAndRender();
+        }
+    }
+
+    function removeMember(index) {
+        membros.splice(index, 1);
+        saveAndRender();
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('membrosMidia', JSON.stringify(membros));
+        renderMembers();
+        gerarEscala();
+    }
+
+    function renderMembers() {
+        document.getElementById('memberList').innerHTML = membros.map((m, i) => `
+            <div class="member-item"><span>${m}</span><button class="btn-del" onclick="removeMember(${i})">✕</button></div>
+        `).join('');
+    }
+
+    function gerarEscala() {
+        const startVal = document.getElementById('startDate').value;
+        const endVal = document.getElementById('endDate').value;
+        const selectedDays = Array.from(document.querySelectorAll('.day-check:checked')).map(cb => cb.value);
+        
+        localStorage.setItem('escala_start', startVal);
+        localStorage.setItem('escala_end', endVal);
+        localStorage.setItem('escala_days', JSON.stringify(selectedDays));
+
+        const tableBody = document.querySelector('#resultTable tbody');
+        if (!startVal || !endVal || membros.length === 0 || selectedDays.length === 0) {
+            tableBody.innerHTML = "";
+            return;
+        }
+
+        let cur = new Date(startVal + 'T00:00:00');
+        let end = new Date(endVal + 'T00:00:00');
+        const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+        tableBody.innerHTML = "";
+        let i = 0;
+
+        while (cur <= end) {
+            if (selectedDays.includes(cur.getDay().toString())) {
+                const row = tableBody.insertRow();
+                const dataStr = `${cur.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})} (${diasSemana[cur.getDay()]})`;
+                row.innerHTML = `<td>${dataStr}</td><td>${criarSeletor(membros[i % membros.length])}</td>`;
+                i++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+    }
+
+    function criarSeletor(nomeSelecionado) {
+        let options = membros.map(m => `<option value="${m}" ${m === nomeSelecionado ? 'selected' : ''}>${m}</option>`).join('');
+        return `<select class="name-select">${options}</select>`;
+    }
+
+    function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Título maior
+        doc.setFontSize(22);
+        doc.setTextColor(26, 115, 232);
+        doc.text("ESCALA DA MÍDIA", 14, 20);
+
+        const rows = [];
+        document.querySelectorAll("#resultTable tbody tr").forEach(tr => {
+            rows.push([tr.cells[0].innerText, tr.cells[1].querySelector('select').value]);
+        });
+
+        doc.autoTable({
+            head: [['DATA / DIA', 'RESPONSÁVEL']],
+            body: rows,
+            startY: 30,
+            theme: 'striped',
+            headStyles: { 
+                fillColor: [26, 115, 232], 
+                fontSize: 16, // Aumentado
+                cellPadding: 6 
+            },
+            styles: { 
+                fontSize: 14, // Aumentado (Letras bem grandes no PDF)
+                cellPadding: 5,
+                valign: 'middle'
+            },
+            columnStyles: {
+                0: { cellWidth: 60 }, // Ajuste de largura das colunas
+                1: { fontStyle: 'bold' }
+            }
+        });
+
+        doc.save("escala_midia_celular.pdf");
+    }
+</script>
+</body>
+</html>
